@@ -16,15 +16,20 @@ module pixel_memory (
     G2,
     B2  // Bottom half colors
 );
-  // Memory write address calculation (14 bits for SPRAM)
-  logic [13:0] write_addr;
-  assign write_addr = {write_y[5:0], write_x[5:0], 2'b00};
+  // Write to correct half based on y coordinate
+  logic write_top, write_bottom;
+  assign write_top = write_en && ~write_y[5];  // y < 32
+  assign write_bottom = write_en && write_y[5];  // y >= 32
 
-  // Display read address calculation (14 bits for SPRAM)
-  logic [13:0] read_addr;
-  assign read_addr = {row_addr[4:0], 1'b0, col_addr[5:0], 2'b00};
-  logic [13:0] read_addr2;
-  assign read_addr2 = {row_addr[4:0], 1'b1, col_addr[5:0], 2'b00};
+  // Address calculation - make sure we have 14 bits total
+  logic [13:0] write_addr_mapped;
+  assign write_addr_mapped = {1'b0, write_y[4:0], write_x[5:0], 2'b00};  // 1 + 5 + 6 + 2 = 14 bits
+
+  // Read addresses for each half - also 14 bits
+  logic [13:0] read_addr_top;
+  logic [13:0] read_addr_bottom;
+  assign read_addr_top = {1'b0, row_addr[4:0], col_addr[5:0], 2'b00};  // 1 + 5 + 6 + 2 = 14 bits
+  assign read_addr_bottom = {1'b0, row_addr[4:0], col_addr[5:0], 2'b00};  // 1 + 5 + 6 + 2 = 14 bits
 
   // 16-bit data signals for SPRAM
   logic [15:0] write_data;
@@ -32,12 +37,12 @@ module pixel_memory (
 
   logic [15:0] pixel_data1, pixel_data2;
 
-  // Instantiate SPRAM for top half
+  // Top half memory
   SB_SPRAM256KA spram_top (
       .CLOCK(clk),
-      .WREN(write_en && !write_y[5]),  // Write to top half when y[5] = 0
+      .WREN(write_top),
       .CHIPSELECT(1'b1),
-      .ADDRESS(write_en ? write_addr : read_addr),
+      .ADDRESS(write_top ? write_addr_mapped : read_addr_top),
       .DATAIN(write_data),
       .MASKWREN(4'b1111),
       .DATAOUT(pixel_data1),
@@ -46,12 +51,12 @@ module pixel_memory (
       .POWEROFF(1'b1)
   );
 
-  // Instantiate SPRAM for bottom half
+  // Bottom half memory
   SB_SPRAM256KA spram_bottom (
       .CLOCK(clk),
-      .WREN(write_en && write_y[5]),  // Write to bottom half when y[5] = 1
+      .WREN(write_bottom),
       .CHIPSELECT(1'b1),
-      .ADDRESS(write_en ? write_addr : read_addr2),
+      .ADDRESS(write_bottom ? write_addr_mapped : read_addr_bottom),
       .DATAIN(write_data),
       .MASKWREN(4'b1111),
       .DATAOUT(pixel_data2),
