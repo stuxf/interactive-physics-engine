@@ -3,8 +3,8 @@ module oscillator (
 );
 
   // Internal Clock
-  HFOSC #(
-      .CLKHF_DIV("0b11")
+  SB_HFOSC #(
+      .CLKHF_DIV("0b01")
   ) OSCInst1 (
       // Enable low speed clock output
       .CLKHFEN(1'b1),

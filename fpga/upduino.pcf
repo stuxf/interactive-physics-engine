@@ -12,10 +12,10 @@ set_io E   18   # Row address E
 
 # RGB1 (First set of RGB signals)
 set_io R1 10
-set_io G1 45
+set_io G1 3
 set_io B1 19
 
 # RGB2 (Second set of RGB signals)
 set_io R2 21
-set_io G2 3
+set_io G2 44
 set_io B2 11
