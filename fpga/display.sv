@@ -1,5 +1,12 @@
 module display (
-    input  logic clk_in,
+    input logic clk_in,
+
+    // Memory Interface
+    input logic write_en,
+    input logic [5:0] write_x,
+    input logic [5:0] write_y,
+    input logic [2:0] write_color,
+
     // Row Select
     output logic A,
     B,
@@ -40,20 +47,29 @@ module display (
     clk_div <= clk_div + 1;
   end
 
-  // Divide clock by 16
+  // Divide clock by 8
   assign pixel_clk = clk_div[2];
 
   // Row address assignment
   assign {E, D, C, B, A} = row_count;  // Binary to row select pins
 
-  assign {R1, B1, R2, G2} = '0;
+  // Instantiate pixel memory
+  pixel_memory pixel_mem (
+      .clk(clk_in),
+      .write_en(write_en),
+      .write_x(write_x),
+      .write_y(write_y),
+      .write_color(write_color),
+      .col_addr(col_count),
+      .row_addr(row_count),
+      .R1(R1),
+      .G1(G1),
+      .B1(B1),
+      .R2(R2),
+      .G2(G2),
+      .B2(B2)
+  );
 
-  assign {G1, B2} = '1;
-
-  // State register
-  always_ff @(posedge pixel_clk) begin
-    state <= nextstate;
-  end
   // State and control registers
   always_ff @(posedge pixel_clk) begin
     state <= nextstate;
