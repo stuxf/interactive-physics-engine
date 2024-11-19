@@ -9,3 +9,4 @@ abc.history
 *.v~
 hardware.bit
 hardware.config
+*.v
