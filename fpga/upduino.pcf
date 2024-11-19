@@ -1,0 +1,21 @@
+# Control Signals
+set_io OE  47   # Output Enable
+set_io CLK 48   # Clock
+set_io LAT 20   # Latch
+
+# Row Select Pins
+set_io A   6    # Row address A
+set_io B   13   # Row address B
+set_io C   4    # Row address C
+set_io D   12   # Row address D
+set_io E   18   # Row address E
+
+# RGB1 (First set of RGB signals)
+set_io R1 34
+set_io G1 43
+set_io B1 36
+
+# RGB2 (Second set of RGB signals)
+set_io R2 42
+set_io G2 38
+set_io B2 28
