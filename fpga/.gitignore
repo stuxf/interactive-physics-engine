@@ -1,0 +1,12 @@
+*.dblite
+*.asc
+*.bin
+*.blif
+*.vcd
+*.out
+hardware.json
+abc.history
+*.v~
+hardware.bit
+hardware.config
+*.v
