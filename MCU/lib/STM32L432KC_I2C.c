@@ -1,136 +1,103 @@
-
+#include "STM32L432KC.h"
 #include "STM32L432KC_I2C.h"
-#include <stdio.h>
+#include "STM32L432KC_GPIO.h"
+#include "STM32L432KC_RCC.h"
 
-#define MPU6050_I2C_ADDR 0x68
+// Initializes the I2C peripheral
+void initI2C() {
+    // Step 1: Enable required clock domains
+    RCC->AHB2ENR |= RCC_AHB2ENR_GPIOBEN;  // Enable GPIOB clock domain
+    RCC->CR |= RCC_CR_HSION;              // Turn on HSI 16 MHz clock
+    RCC->CCIPR |= _VAL2FLD(RCC_CCIPR_I2C1SEL, 0b10);  // Set HSI16 as the clock for I2C
+    RCC->APB1ENR1 |= RCC_APB1ENR1_I2C1EN; // Enable I2C1 clock
 
-void init_I2C(void) {
-    printf("Initializing I2C...\n");
+    // Step 2: Configure GPIO pins for I2C functionality
+    pinMode(I2C_SCL, GPIO_ALT);  // Set SCL (PB6) to Alternate Function mode
+    pinMode(I2C_SDA, GPIO_ALT);  // Set SDA (PB7) to Alternate Function mode
 
-    // Enable GPIOA clock for PA5 (SDA) and PA6 (SCL)
-    RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
+    GPIOB->AFR[0] |= _VAL2FLD(GPIO_AFRL_AFSEL6, 0b0100); // Set SCL (PB6) to AF4 for I2C
+    GPIOB->AFR[0] |= _VAL2FLD(GPIO_AFRL_AFSEL7, 0b0100); // Set SDA (PB7) to AF4 for I2C
 
-    // Configure PA5 and PA6 as alternate function (AF4 for I2C)
-    GPIOA->MODER &= ~(_VAL2FLD(GPIO_MODER_MODE5, 0b11) | _VAL2FLD(GPIO_MODER_MODE6, 0b11));
-    GPIOA->MODER |= (_VAL2FLD(GPIO_MODER_MODE5, 0b10) | _VAL2FLD(GPIO_MODER_MODE6, 0b10));
+    GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED3;  // Configure output speed to high
+    GPIOB->OTYPER |= GPIO_OTYPER_OT6;        // Enable open-drain mode for SCL
+    GPIOB->OTYPER |= GPIO_OTYPER_OT7;        // Enable open-drain mode for SDA
 
-    GPIOA->OTYPER |= (GPIO_OTYPER_OT5 | GPIO_OTYPER_OT6); // Open-drain
-    GPIOA->OSPEEDR |= (_VAL2FLD(GPIO_OSPEEDR_OSPEED5, 0b11) | _VAL2FLD(GPIO_OSPEEDR_OSPEED6, 0b11)); // High speed
-    GPIOA->PUPDR &= ~(_VAL2FLD(GPIO_PUPDR_PUPD5, 0b11) | _VAL2FLD(GPIO_PUPDR_PUPD6, 0b11)); // No pull-up/pull-down
+    // Step 3: Configure I2C-specific settings
+    I2C1->CR1 &= ~I2C_CR1_ANFOFF;  // Enable analog noise filter
+    I2C1->CR1 |= I2C_CR1_RXIE;     // Enable RX interrupt
+    I2C1->CR1 |= I2C_CR1_TXIE;     // Enable TX interrupt
+    I2C1->CR1 |= I2C_CR1_TCIE;     // Enable transfer-complete interrupt
 
-    GPIOA->AFR[0] |= (_VAL2FLD(GPIO_AFRL_AFSEL5, 4) | _VAL2FLD(GPIO_AFRL_AFSEL6, 4)); // Set AF4 for I2C1
+    // Step 4: Set up timing registers for 400 kHz I2C High Speed Mode
+    I2C1->TIMINGR = 0; // Clear TIMINGR
+    I2C1->TIMINGR |= _VAL2FLD(I2C_TIMINGR_PRESC, 3);    // Prescaler
+    I2C1->TIMINGR |= _VAL2FLD(I2C_TIMINGR_SCLDEL, 4);   // Data setup time
+    I2C1->TIMINGR |= _VAL2FLD(I2C_TIMINGR_SDADEL, 2);   // Data hold time
+    I2C1->TIMINGR |= _VAL2FLD(I2C_TIMINGR_SCLH, 0xF);   // High period
+    I2C1->TIMINGR |= _VAL2FLD(I2C_TIMINGR_SCLL, 0x13);  // Low period
 
-    // Enable I2C1 clock
-    RCC->APB1ENR1 |= RCC_APB1ENR1_I2C1EN;
-
-    // Disable I2C1 during configuration
-    I2C1->CR1 &= ~I2C_CR1_PE;
-
-    // Configure timing for 400 kHz with 16 MHz HSI
-    I2C1->TIMINGR = (_VAL2FLD(I2C_TIMINGR_PRESC, 0) |  // Prescaler = 0
-                     _VAL2FLD(I2C_TIMINGR_SCLL, 0x9) | // SCL low period
-                     _VAL2FLD(I2C_TIMINGR_SCLH, 0x3) | // SCL high period
-                     _VAL2FLD(I2C_TIMINGR_SDADEL, 0x2) | // Data setup time
-                     _VAL2FLD(I2C_TIMINGR_SCLDEL, 0x4)); // Data hold time
-
-    // Enable peripheral
-    I2C1->CR1 |= I2C_CR1_PE;
-
-    // Enable auto end mode
-    I2C1->CR2 |= I2C_CR2_AUTOEND;
-
-    printf("I2C initialized successfully.\n");
+    // Step 5: Enable auto-end mode and the I2C peripheral
+    I2C1->CR2 |= I2C_CR2_AUTOEND;  // Enable auto-end mode
+    I2C1->CR1 |= I2C_CR1_PE;       // Enable I2C peripheral
 }
 
-void I2C_Write(uint8_t addr, uint8_t reg, uint8_t data) {
-    printf("I2C Write: Addr=0x%X, Reg=0x%X, Data=0x%X\n", addr, reg, data);
 
-    // Wait until I2C is ready
-    while (I2C1->CR2 & I2C_CR2_START);
+// Configures I2C communication parameters
+void ConfigureI2C(char address, char nbytes, uint16_t Read) {
+    // Set 7-bit addressing mode using _VAL2FLD for clarity
+    I2C1->CR2 &= ~I2C_CR2_ADD10;
 
-    // Clear NACK flag
-    I2C1->ICR |= I2C_ICR_NACKCF;
+    // Enable 7-bit header followed by r/w bit
+    I2C1->CR2 |= _VAL2FLD(I2C_CR2_HEAD10R, 1);
 
-    // Configure transfer for writing 2 bytes
-    I2C1->CR2 = (_VAL2FLD(I2C_CR2_SADD, addr << 1) |  // Address
-                 _VAL2FLD(I2C_CR2_NBYTES, 2) |        // 2 bytes: Register + Data
-                 _VAL2FLD(I2C_CR2_RD_WRN, 0) |        // Write
-                 I2C_CR2_START);                      // Start condition
+    // Configure the slave address
+    I2C1->CR2 &= ~I2C_CR2_SADD_Msk;               // Clear existing address
+    I2C1->CR2 |= _VAL2FLD(I2C_CR2_SADD, address << 1); // Set new slave address
 
-    // Wait for TXIS flag
-    while (!(I2C1->ISR & I2C_ISR_TXIS)) {
-        if (I2C1->ISR & I2C_ISR_NACKF) {
-            printf("Error: NACK received during write.\n");
-            I2C1->ICR |= I2C_ICR_NACKCF;
-            return;
-        }
+    // Configure transfer direction
+    if (Read) {
+        I2C1->CR2 |= I2C_CR2_RD_WRN;  // Set read operation
+    } else {
+        I2C1->CR2 &= ~I2C_CR2_RD_WRN; // Set write operation
     }
 
-    // Send register address
-    I2C1->TXDR = reg;
+    // Set number of bytes to send/receive
+    I2C1->CR2 &= ~I2C_CR2_NBYTES_Msk; // Clear NBYTES field
+    I2C1->CR2 |= _VAL2FLD(I2C_CR2_NBYTES, nbytes); // Set NBYTES
 
-    // Wait for TXIS flag
-    while (!(I2C1->ISR & I2C_ISR_TXIS));
-
-    // Send data
-    I2C1->TXDR = data;
-
-    // Wait for transfer to complete
-    while (!(I2C1->ISR & I2C_ISR_TC));
-
-    printf("I2C Write Complete.\n");
+    // Generate START condition
+    I2C1->CR2 |= _VAL2FLD(I2C_CR2_START, 1);
 }
 
-uint8_t I2C_Read(uint8_t addr, uint8_t reg) {
-    printf("I2C Read: Addr=0x%X, Reg=0x%X\n", addr, reg);
 
-    // Write the register address
-    while (I2C1->CR2 & I2C_CR2_START);
+// Sends data over I2C
+void sendI2C(char address, char send[], char nbytes) {
+    // Initialize communication for write operation
+    ConfigureI2C(address, nbytes, 0);
 
-    I2C1->ICR |= I2C_ICR_NACKCF; // Clear NACK flag
+    I2C1->ISR |= I2C_ISR_TXIS_Msk;
 
-    I2C1->CR2 = (_VAL2FLD(I2C_CR2_SADD, addr << 1) |  // Address
-                 _VAL2FLD(I2C_CR2_NBYTES, 1) |        // 1 byte: Register
-                 _VAL2FLD(I2C_CR2_RD_WRN, 0) |        // Write
-                 I2C_CR2_START);                      // Start condition
+    // Transmit data byte-by-byte
+    for (int i = 0; i < nbytes; i++) {
+        // Wait until TXIS is set
+        while (!(I2C1->ISR & I2C_ISR_TXIS));
 
-    // Wait for TXIS flag
-    while (!(I2C1->ISR & I2C_ISR_TXIS));
-
-    // Send register address
-    I2C1->TXDR = reg;
-
-    // Wait for transfer complete
-    while (!(I2C1->ISR & I2C_ISR_TC));
-
-    // Configure for reading 1 byte
-    I2C1->CR2 = (_VAL2FLD(I2C_CR2_SADD, addr << 1) |  // Address
-                 _VAL2FLD(I2C_CR2_NBYTES, 1) |        // 1 byte
-                 _VAL2FLD(I2C_CR2_RD_WRN, 1) |        // Read
-                 I2C_CR2_START);                      // Start condition
-
-    // Wait for RXNE flag
-    while (!(I2C1->ISR & I2C_ISR_RXNE));
-
-    // Read data
-    uint8_t data = I2C1->RXDR;
-
-    printf("I2C Read Complete: Data=0x%X\n", data);
-    return data;
+        // Write data to TXDR
+        *((volatile char *)(&I2C1->TXDR)) = send[i];
+    }
 }
 
-void I2C_Scan(void) {
-    printf("Scanning I2C bus...\n");
-    for (uint8_t addr = 1; addr < 128; addr++) {
-        while (I2C1->CR2 & I2C_CR2_START);
-        I2C1->ICR |= I2C_ICR_NACKCF;
+// Reads data over I2C
+void readI2C(char address, char nbytes, char *receive) {
+    // Initialize communication for read operation
+    ConfigureI2C(address, nbytes, 1);
 
-        I2C1->CR2 = (_VAL2FLD(I2C_CR2_SADD, addr << 1) | _VAL2FLD(I2C_CR2_NBYTES, 0) | I2C_CR2_START);
-        while (!(I2C1->ISR & (I2C_ISR_TC | I2C_ISR_NACKF)));
+    // Receive data byte-by-byte
+    for (int i = 0; i < nbytes; i++) {
+        // Wait until RXNE is set
+        while (!(I2C1->ISR & I2C_ISR_RXNE));
 
-        if (!(I2C1->ISR & I2C_ISR_NACKF)) {
-            printf("Device found at 0x%X\n", addr);
-        }
-        I2C1->ICR |= I2C_ICR_NACKCF; // Clear NACK flag
+        // Read data from RXDR
+        receive[i] = (volatile char)I2C1->RXDR;
     }
 }
