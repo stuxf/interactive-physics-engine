@@ -5,29 +5,26 @@ module display (
     input logic write_en,
     input logic [5:0] write_x,
     input logic [5:0] write_y,
-    input logic [2:0] write_color,
+    input logic [8:0] write_color,
 
-    // Row Select
+    // Outputs
     output logic A,
     B,
     C,
     D,
     E,
-    // Top Half Colors
     output logic R1,
     B1,
     G1,
-    // Bottom Half Colors
     output logic R2,
     B2,
     G2,
-    // Control Signals
     output logic CLK,
-    output logic OE,
-    output logic LAT
+    OE,
+    LAT
 );
 
-  // State and counters
+  // State definitions
   typedef enum logic [1:0] {
     SHIFT   = 2'b00,
     LATCH   = 2'b01,
@@ -39,21 +36,22 @@ module display (
   logic [4:0] row_count;
   logic [7:0] display_timer;
 
-  // Clock divider for slower operation (2**3)
+  // BCM control
+  logic [1:0] bcm_phase;  // Current BCM phase
+  logic [2:0] phase_counter;  // Short counter for fast updates
+
+  // Clock division
   logic [2:0] clk_div;
-  logic pixel_clk;
+  logic       pixel_clk;
 
   always_ff @(posedge clk_in) begin
     clk_div <= clk_div + 1;
   end
 
-  // Divide clock by 8
   assign pixel_clk = clk_div[2];
+  assign {E, D, C, B, A} = row_count;
 
-  // Row address assignment
-  assign {E, D, C, B, A} = row_count;  // Binary to row select pins
-
-  // Instantiate pixel memory
+  // Pixel memory instance
   pixel_memory pixel_mem (
       .clk(clk_in),
       .write_en(write_en),
@@ -62,6 +60,7 @@ module display (
       .write_color(write_color),
       .col_addr(col_count),
       .row_addr(row_count),
+      .bcm_phase(bcm_phase),
       .R1(R1),
       .G1(G1),
       .B1(B1),
@@ -70,14 +69,25 @@ module display (
       .B2(B2)
   );
 
-  // State and control registers
+  // BCM phase control - keep it fast but cycle through phases regularly
+  always_ff @(posedge pixel_clk) begin
+    phase_counter <= phase_counter + 1;
+
+    if (phase_counter == 3'd5) begin  // Change phase every 6 cycles
+      phase_counter <= '0;
+      if (bcm_phase == 2'd2) bcm_phase <= '0;
+      else bcm_phase <= bcm_phase + 1;
+    end
+  end
+
+  // Main state machine
   always_ff @(posedge pixel_clk) begin
     state <= nextstate;
 
     case (state)
       SHIFT: begin
-        CLK <= ~CLK;  // Toggle clock in registered logic
-        if (CLK) begin  // On current clock high
+        CLK <= ~CLK;
+        if (CLK) begin
           if (col_count == 63) col_count <= '0;
           else col_count <= col_count + 1;
         end
@@ -98,36 +108,25 @@ module display (
         end
       end
 
-      default: begin
-        CLK <= 1'b0;
-      end
+      default: CLK <= 1'b0;
     endcase
   end
 
   // Next state logic
   always_comb begin
     unique case (state)
-      SHIFT: begin
-        if (CLK && col_count == 63) nextstate = LATCH;
-        else nextstate = SHIFT;
-      end
-
-      LATCH: nextstate = DISPLAY;
-
-      DISPLAY: begin
-        if (display_timer == 255) nextstate = SHIFT;
-        else nextstate = DISPLAY;
-      end
-
+      SHIFT:   nextstate = (CLK && col_count == 63) ? LATCH : SHIFT;
+      LATCH:   nextstate = DISPLAY;
+      DISPLAY: nextstate = (display_timer == 255) ? SHIFT : DISPLAY;
       default: nextstate = SHIFT;
     endcase
   end
 
-  // Output logic (pure combinational outputs)
+  // Output logic
   always_comb begin
     unique case (state)
       SHIFT: begin
-        OE  = 1'b1;  // Disable while shifting
+        OE  = 1'b1;
         LAT = 1'b0;
       end
 
@@ -137,8 +136,9 @@ module display (
       end
 
       DISPLAY: begin
-        OE  = 1'b0;  // Enable output
         LAT = 1'b0;
+        // Minimal blanking at phase changes
+        OE  = (phase_counter == 3'd5) ? 1'b1 : 1'b0;
       end
 
       default: begin

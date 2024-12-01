@@ -2,13 +2,14 @@ module pixel_memory (
     input logic clk,
     // Memory write interface
     input logic write_en,
-    input logic [5:0] write_x,  // 0-63 x coordinate
-    input logic [5:0] write_y,  // 0-63 y coordinate
-    input logic [2:0] write_color,  // RGB value for pixel
+    input logic [5:0] write_x,
+    input logic [5:0] write_y,
+    input logic [8:0] write_color,  // 3 bits per channel (RGB)
 
     // Display interface
-    input  logic [5:0] col_addr,  // Current column being displayed
-    input  logic [4:0] row_addr,  // Current row being displayed
+    input  logic [5:0] col_addr,
+    input  logic [4:0] row_addr,
+    input  logic [1:0] bcm_phase,  // Changed to 2 bits for 0-2 range
     output logic       R1,
     G1,
     B1,  // Top half colors
@@ -18,26 +19,25 @@ module pixel_memory (
 );
   // Write to correct half based on y coordinate
   logic write_top, write_bottom;
-  assign write_top = write_en && ~write_y[5];  // y < 32
-  assign write_bottom = write_en && write_y[5];  // y >= 32
+  assign write_top = write_en && ~write_y[5];     // y < 32
+  assign write_bottom = write_en && write_y[5];   // y >= 32
 
-  // Address calculation - make sure we have 14 bits total
+  // Address calculation (14 bits total)
   logic [13:0] write_addr_mapped;
-  assign write_addr_mapped = {1'b0, write_y[4:0], write_x[5:0], 2'b00};  // 1 + 5 + 6 + 2 = 14 bits
+  assign write_addr_mapped = {1'b0, write_y[4:0], write_x[5:0], 2'b00};
 
-  // Read addresses for each half - also 14 bits
-  logic [13:0] read_addr_top;
-  logic [13:0] read_addr_bottom;
-  assign read_addr_top = {1'b0, row_addr[4:0], col_addr[5:0], 2'b00};  // 1 + 5 + 6 + 2 = 14 bits
-  assign read_addr_bottom = {1'b0, row_addr[4:0], col_addr[5:0], 2'b00};  // 1 + 5 + 6 + 2 = 14 bits
+  // Read addresses for each half
+  logic [13:0] read_addr_top, read_addr_bottom;
+  assign read_addr_top = {1'b0, row_addr[4:0], col_addr[5:0], 2'b00};
+  assign read_addr_bottom = {1'b0, row_addr[4:0], col_addr[5:0], 2'b00};
 
-  // 16-bit data signals for SPRAM
+  // Expand to 16-bit data for SPRAM
   logic [15:0] write_data;
-  assign write_data = {13'b0, write_color};
+  assign write_data = {7'b0, write_color};  // 7 unused + 9 color bits
 
   logic [15:0] pixel_data1, pixel_data2;
 
-  // Top half memory
+  // Memory instantiation
   SB_SPRAM256KA spram_top (
       .CLOCK(clk),
       .WREN(write_top),
@@ -51,7 +51,6 @@ module pixel_memory (
       .POWEROFF(1'b1)
   );
 
-  // Bottom half memory
   SB_SPRAM256KA spram_bottom (
       .CLOCK(clk),
       .WREN(write_bottom),
@@ -65,8 +64,17 @@ module pixel_memory (
       .POWEROFF(1'b1)
   );
 
-  // Assign RGB outputs (taking only the lowest 3 bits)
-  assign {R1, G1, B1} = pixel_data1[2:0];
-  assign {R2, G2, B2} = pixel_data2[2:0];
+  // Extract color components
+  logic [2:0] r1, g1, b1, r2, g2, b2;
+  assign {r1, g1, b1} = pixel_data1[8:0];
+  assign {r2, g2, b2} = pixel_data2[8:0];
 
+  // BCM output comparison
+  // Use bcm_phase[1:0] for indexing 3-bit values
+  assign R1 = bcm_phase < 3 ? r1[bcm_phase] : 1'b0;
+  assign G1 = bcm_phase < 3 ? g1[bcm_phase] : 1'b0;
+  assign B1 = bcm_phase < 3 ? b1[bcm_phase] : 1'b0;
+  assign R2 = bcm_phase < 3 ? r2[bcm_phase] : 1'b0;
+  assign G2 = bcm_phase < 3 ? g2[bcm_phase] : 1'b0;
+  assign B2 = bcm_phase < 3 ? b2[bcm_phase] : 1'b0;
 endmodule
