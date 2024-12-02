@@ -26,6 +26,7 @@ void testI2C_Read(uint8_t address, uint8_t reg) {
 
     printf("Read operation completed successfully. Data: 0x%X\n", readData[0]);
 }
+void mcu_to_fpga(int16_t accel_x, int16_t accel_y, int16_t accel_z);
 
 /*
 int main(void) {
@@ -55,6 +56,7 @@ int main(void) {
      RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
   initTIM(TIM2);
     initI2C();
+    initSPI(1, 0, 0);
 
     uint8_t address = 0x68;  // Example I2C address
     uint8_t reg = 0x6B;      // Power Management Register
@@ -77,8 +79,37 @@ int main(void) {
 
     MPU6050_Read_Gyro(&gyro_data);
     printf("Gyro X: %.2fdeg/s, Y: %.2fdeg/s, Z: %.2fdeg/s\n", gyro_data.Gyro_X, gyro_data.Gyro_Y, gyro_data.Gyro_Z);
-    delay_millis(TIM2, 500);
+    // Convert to raw integer data
+        int16_t accel_x = (int16_t)(accel_data.Accel_X * 1000); // Convert to milli-g
+        int16_t accel_y = (int16_t)(accel_data.Accel_Y * 1000);
+        int16_t accel_z = (int16_t)(accel_data.Accel_Z * 1000);
+
+        // Print accelerometer data for debugging
+    printf("Accel X: %d, Y: %d, Z: %d\n", accel_x, accel_y, accel_z);
+
+        // Send data to FPGA via SPI
+    mcu_to_fpga(accel_x, accel_y, accel_z);
+    delay_millis(TIM2, 1000);
+
     //delay_millis(TIM2,100); // Delay 1 second between prints
 }
 
+}
+
+
+// Function to send accelerometer data to FPGA
+void mcu_to_fpga(int16_t accel_x, int16_t accel_y, int16_t accel_z) {
+    // Set chip enable high
+    digitalWrite(SPI_CE, 1);
+
+    // Send accelerometer data (X, Y, Z)
+    spiSendReceive((accel_x >> 8) & 0xFF); // High byte of X
+    spiSendReceive(accel_x & 0xFF);        // Low byte of X
+    spiSendReceive((accel_y >> 8) & 0xFF); // High byte of Y
+    spiSendReceive(accel_y & 0xFF);        // Low byte of Y
+   spiSendReceive((accel_z >> 8) & 0xFF); // High byte of Z
+    spiSendReceive(accel_z & 0xFF);        // Low byte of Z
+
+    // Set chip enable low
+    digitalWrite(SPI_CE, 0);
 }
