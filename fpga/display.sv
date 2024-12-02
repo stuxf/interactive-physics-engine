@@ -5,53 +5,66 @@ module display (
     input logic write_en,
     input logic [5:0] write_x,
     input logic [5:0] write_y,
-    input logic [8:0] write_color,
+    input logic [2:0] write_color,
 
-    // Outputs
+    // Row Select
     output logic A,
     B,
     C,
     D,
     E,
+    // Top Half Colors
     output logic R1,
     B1,
     G1,
+    // Bottom Half Colors
     output logic R2,
     B2,
     G2,
+    // Control Signals
     output logic CLK,
-    OE,
-    LAT
+    output logic OE,
+    output logic LAT
 );
 
-  // State definitions
+  // State machine definitions
   typedef enum logic [1:0] {
     SHIFT   = 2'b00,
     LATCH   = 2'b01,
     DISPLAY = 2'b10
   } state_t;
 
-  state_t state, nextstate;
-  logic [5:0] col_count;
-  logic [4:0] row_count;
-  logic [7:0] display_timer;
+  // Internal registers with initialization
+  state_t state = SHIFT, next_state;
+  logic [5:0] col_count = '0;  // Column counter (0-63)
+  logic [4:0] row_count = '0;  // Row counter (0-31)
+  logic [9:0] bit_timer = '0;  // Timer for BCM bit duration
+  logic [1:0] bcm_bit = '0;  // Current bit being displayed (0-2)
+  logic [1:0] clk_div = '0;  // Clock divider
 
-  // BCM control
-  logic [1:0] bcm_phase;  // Current BCM phase
-  logic [2:0] phase_counter;  // Short counter for fast updates
+  // BCM timing parameters (bit weights: 1, 2, 4)
+  logic [9:0] bit_duration;
+  always_comb begin
+    case (bcm_bit)
+      2'd0: bit_duration = 10'd63;  // LSB duration (1 unit)
+      2'd1: bit_duration = 10'd127;  // Middle bit duration (2 units)
+      2'd2: bit_duration = 10'd255;  // MSB duration (4 units)
+      default: bit_duration = 10'd63;
+    endcase
+  end
 
-  // Clock division
-  logic [2:0] clk_div;
-  logic       pixel_clk;
-
+  // Clock division for pixel clock
   always_ff @(posedge clk_in) begin
     clk_div <= clk_div + 1;
   end
 
-  assign pixel_clk = clk_div[2];
+  logic pixel_clk;
+  assign pixel_clk = clk_div[1];
+
+  // Row select signals
   assign {E, D, C, B, A} = row_count;
 
-  // Pixel memory instance
+  // Instantiate pixel memory
   pixel_memory pixel_mem (
       .clk(clk_in),
       .write_en(write_en),
@@ -60,7 +73,7 @@ module display (
       .write_color(write_color),
       .col_addr(col_count),
       .row_addr(row_count),
-      .bcm_phase(bcm_phase),
+      .bcm_phase(bcm_bit),  // Now represents actual bit position
       .R1(R1),
       .G1(G1),
       .B1(B1),
@@ -69,25 +82,14 @@ module display (
       .B2(B2)
   );
 
-  // BCM phase control - keep it fast but cycle through phases regularly
-  always_ff @(posedge pixel_clk) begin
-    phase_counter <= phase_counter + 1;
-
-    if (phase_counter == 3'd5) begin  // Change phase every 6 cycles
-      phase_counter <= '0;
-      if (bcm_phase == 2'd2) bcm_phase <= '0;
-      else bcm_phase <= bcm_phase + 1;
-    end
-  end
-
   // Main state machine
   always_ff @(posedge pixel_clk) begin
-    state <= nextstate;
+    state <= next_state;
 
     case (state)
       SHIFT: begin
         CLK <= ~CLK;
-        if (CLK) begin
+        if (CLK) begin  // Only increment on falling edge
           if (col_count == 63) col_count <= '0;
           else col_count <= col_count + 1;
         end
@@ -95,30 +97,39 @@ module display (
 
       LATCH: begin
         CLK <= 1'b0;
-        display_timer <= '0;
+        bit_timer <= '0;  // Reset timer for new bit display
       end
 
       DISPLAY: begin
         CLK <= 1'b0;
-        if (display_timer == 255) begin
-          if (row_count == 31) row_count <= '0;
-          else row_count <= row_count + 1;
+        if (bit_timer == bit_duration) begin
+          // Move to next bit or row
+          bit_timer <= '0;
+          if (bcm_bit == 2'd2) begin
+            bcm_bit <= 2'd0;
+            if (row_count == 31) row_count <= '0;
+            else row_count <= row_count + 1;
+          end else begin
+            bcm_bit <= bcm_bit + 1;
+          end
         end else begin
-          display_timer <= display_timer + 1;
+          bit_timer <= bit_timer + 1;
         end
       end
 
-      default: CLK <= 1'b0;
+      default: begin
+        CLK <= 1'b0;
+      end
     endcase
   end
 
   // Next state logic
   always_comb begin
     unique case (state)
-      SHIFT:   nextstate = (CLK && col_count == 63) ? LATCH : SHIFT;
-      LATCH:   nextstate = DISPLAY;
-      DISPLAY: nextstate = (display_timer == 255) ? SHIFT : DISPLAY;
-      default: nextstate = SHIFT;
+      SHIFT:   next_state = (CLK && col_count == 63) ? LATCH : SHIFT;
+      LATCH:   next_state = DISPLAY;
+      DISPLAY: next_state = (bit_timer == bit_duration) ? SHIFT : DISPLAY;
+      default: next_state = SHIFT;
     endcase
   end
 
@@ -126,19 +137,18 @@ module display (
   always_comb begin
     unique case (state)
       SHIFT: begin
-        OE  = 1'b1;
+        OE  = 1'b1;  // Blank during shifting
         LAT = 1'b0;
       end
 
       LATCH: begin
-        OE  = 1'b1;
+        OE  = 1'b1;  // Keep blanked during latch
         LAT = 1'b1;
       end
 
       DISPLAY: begin
         LAT = 1'b0;
-        // Minimal blanking at phase changes
-        OE  = (phase_counter == 3'd5) ? 1'b1 : 1'b0;
+        OE  = 1'b0;  // Display for the full bit duration
       end
 
       default: begin
