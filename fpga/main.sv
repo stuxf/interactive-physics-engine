@@ -1,4 +1,5 @@
 module main (
+    // LED Matrix outputs
     output logic A,
     B,
     C,
@@ -12,7 +13,16 @@ module main (
     G2,
     output logic CLK,
     OE,
-    LAT
+    LAT,
+
+    // SPI interface
+    input  logic sdi,
+    input  logic sclk,
+    input  logic cs_n,
+    input  logic resetn,
+    output logic led0,
+    output logic led1,
+    output logic led2
 );
   logic int_osc;
   oscillator oscillator (.clk(int_osc));
@@ -32,6 +42,17 @@ module main (
   logic [2:0] sector;
   logic [3:0] factor;
   logic [5:0] adjusted_x;
+
+  // SPI peripheral instantiation
+  spi_peripheral spi (
+      .resetn(resetn),
+      .sclk(sclk),
+      .sdi(sdi),
+      .cs_n(cs_n),
+      .led0(led0),
+      .led1(led1),
+      .led2(led2)
+  );
 
   // Calculate rainbow colors using position
   always_comb begin

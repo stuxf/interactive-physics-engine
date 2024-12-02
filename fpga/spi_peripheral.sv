@@ -1,5 +1,4 @@
 module spi_peripheral (
-    input  logic clk,     // System clock for internal logic
     input  logic resetn,  // Active-low reset
     input  logic sclk,    // SPI clock
     input  logic sdi,     // Serial Data In (was MOSI)
