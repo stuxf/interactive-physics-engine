@@ -55,15 +55,6 @@ module display (
     endcase
   end
 
-  // Rest of the module remains the same but using bcm_bit as [1:0]
-  // Clock division for pixel clock
-  always_ff @(posedge clk_in) begin
-    clk_div <= clk_div + 1;
-  end
-
-  logic pixel_clk;
-  assign pixel_clk = clk_div[1];
-
   // Row select signals
   assign {E, D, C, B, A} = row_count;
 
@@ -86,7 +77,7 @@ module display (
   );
 
   // Main state machine
-  always_ff @(posedge pixel_clk) begin
+  always_ff @(posedge clk_in) begin
     state <= next_state;
 
     case (state)
