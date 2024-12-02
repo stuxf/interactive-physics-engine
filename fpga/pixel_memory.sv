@@ -4,12 +4,12 @@ module pixel_memory (
     input logic write_en,
     input logic [5:0] write_x,
     input logic [5:0] write_y,
-    input logic [8:0] write_color,  // 3 bits per channel (RGB)
+    input logic [11:0] write_color,  // 4 bits per channel (RGB)
 
     // Display interface
     input  logic [5:0] col_addr,
     input  logic [4:0] row_addr,
-    input  logic [1:0] bcm_phase,  // Changed to 2 bits for 0-2 range
+    input  logic [1:0] bcm_phase,  // Changed to 2 bits for 0-3 range
     output logic       R1,
     G1,
     B1,  // Top half colors
@@ -17,6 +17,7 @@ module pixel_memory (
     G2,
     B2  // Bottom half colors
 );
+  // Rest of the module remains the same
   // Write to correct half based on y coordinate
   logic write_top, write_bottom;
   assign write_top = write_en && ~write_y[5];     // y < 32
@@ -33,7 +34,7 @@ module pixel_memory (
 
   // Expand to 16-bit data for SPRAM
   logic [15:0] write_data;
-  assign write_data = {7'b0, write_color};  // 7 unused + 9 color bits
+  assign write_data = {4'b0, write_color};  // 4 unused + 12 color bits
 
   logic [15:0] pixel_data1, pixel_data2;
 
@@ -64,17 +65,17 @@ module pixel_memory (
       .POWEROFF(1'b1)
   );
 
-  // Extract color components
-  logic [2:0] r1, g1, b1, r2, g2, b2;
-  assign {r1, g1, b1} = pixel_data1[8:0];
-  assign {r2, g2, b2} = pixel_data2[8:0];
+  // Extract color components (4 bits each)
+  logic [3:0] r1, g1, b1, r2, g2, b2;
+  assign {r1, g1, b1} = pixel_data1[11:0];
+  assign {r2, g2, b2} = pixel_data2[11:0];
 
   // BCM output comparison
-  // Use bcm_phase[1:0] for indexing 3-bit values
-  assign R1 = bcm_phase < 3 ? r1[bcm_phase] : 1'b0;
-  assign G1 = bcm_phase < 3 ? g1[bcm_phase] : 1'b0;
-  assign B1 = bcm_phase < 3 ? b1[bcm_phase] : 1'b0;
-  assign R2 = bcm_phase < 3 ? r2[bcm_phase] : 1'b0;
-  assign G2 = bcm_phase < 3 ? g2[bcm_phase] : 1'b0;
-  assign B2 = bcm_phase < 3 ? b2[bcm_phase] : 1'b0;
+  // Use bcm_phase[1:0] for indexing 4-bit values
+  assign R1 = r1[bcm_phase];
+  assign G1 = g1[bcm_phase];
+  assign B1 = b1[bcm_phase];
+  assign R2 = r2[bcm_phase];
+  assign G2 = g2[bcm_phase];
+  assign B2 = b2[bcm_phase];
 endmodule

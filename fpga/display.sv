@@ -1,11 +1,12 @@
 module display (
+    // ... port declarations remain the same ...
     input logic clk_in,
 
     // Memory Interface
     input logic write_en,
     input logic [5:0] write_x,
     input logic [5:0] write_y,
-    input logic [2:0] write_color,
+    input logic [11:0] write_color,  // Changed to 12 bits
 
     // Row Select
     output logic A,
@@ -27,7 +28,7 @@ module display (
     output logic LAT
 );
 
-  // State machine definitions
+  // State machine definitions remain the same
   typedef enum logic [1:0] {
     SHIFT   = 2'b00,
     LATCH   = 2'b01,
@@ -36,23 +37,25 @@ module display (
 
   // Internal registers with initialization
   state_t state = SHIFT, next_state;
-  logic [5:0] col_count = '0;  // Column counter (0-63)
-  logic [4:0] row_count = '0;  // Row counter (0-31)
-  logic [9:0] bit_timer = '0;  // Timer for BCM bit duration
-  logic [1:0] bcm_bit = '0;  // Current bit being displayed (0-2)
-  logic [1:0] clk_div = '0;  // Clock divider
+  logic [ 5:0] col_count = '0;  // Column counter (0-63)
+  logic [ 4:0] row_count = '0;  // Row counter (0-31)
+  logic [10:0] bit_timer = '0;  // Timer for BCM bit duration
+  logic [ 1:0] bcm_bit = '0;  // Current bit being displayed (0-3)
+  logic [ 1:0] clk_div = '0;  // Clock divider
 
-  // BCM timing parameters (bit weights: 1, 2, 4)
-  logic [9:0] bit_duration;
+  // BCM timing parameters (bit weights: 1, 2, 4, 8)
+  logic [10:0] bit_duration;
   always_comb begin
     case (bcm_bit)
-      2'd0: bit_duration = 10'd63;  // LSB duration (1 unit)
-      2'd1: bit_duration = 10'd127;  // Middle bit duration (2 units)
-      2'd2: bit_duration = 10'd255;  // MSB duration (4 units)
-      default: bit_duration = 10'd63;
+      2'd0: bit_duration = 11'd63;  // LSB duration (1 unit)
+      2'd1: bit_duration = 11'd127;  // Bit 1 duration (2 units)
+      2'd2: bit_duration = 11'd255;  // Bit 2 duration (4 units)
+      2'd3: bit_duration = 11'd511;  // MSB duration (8 units)
+      default: bit_duration = 11'd511;
     endcase
   end
 
+  // Rest of the module remains the same but using bcm_bit as [1:0]
   // Clock division for pixel clock
   always_ff @(posedge clk_in) begin
     clk_div <= clk_div + 1;
@@ -73,7 +76,7 @@ module display (
       .write_color(write_color),
       .col_addr(col_count),
       .row_addr(row_count),
-      .bcm_phase(bcm_bit),  // Now represents actual bit position
+      .bcm_phase(bcm_bit),
       .R1(R1),
       .G1(G1),
       .B1(B1),
@@ -105,7 +108,7 @@ module display (
         if (bit_timer == bit_duration) begin
           // Move to next bit or row
           bit_timer <= '0;
-          if (bcm_bit == 2'd2) begin
+          if (bcm_bit == 2'd3) begin  // Check for bit 3 using 2 bits
             bcm_bit <= 2'd0;
             if (row_count == 31) row_count <= '0;
             else row_count <= row_count + 1;
@@ -123,6 +126,7 @@ module display (
     endcase
   end
 
+  // Rest of the module remains the same
   // Next state logic
   always_comb begin
     unique case (state)

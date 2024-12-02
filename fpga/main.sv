@@ -20,134 +20,81 @@ module main (
   // Memory write interface
   logic write_en;
   logic [5:0] write_x, write_y;
-  logic [8:0] write_color;
+  logic [11:0] pixel_color;  // [RRRR,GGGG,BBBB] format
 
   // Pattern generator registers
   logic [5:0] pattern_x, pattern_y;
   logic [ 3:0] write_divider;
-  logic [27:0] frame_counter;  // Long counter for slow changes
-  logic [ 8:0] next_color;
+  logic [27:0] frame_counter;
 
-  // All possible colors (8 colors with RGB combinations)
-  parameter logic [8:0] BLACK = 9'b000_000_000;
-  parameter logic [8:0] RED = 9'b111_000_000;
-  parameter logic [8:0] GREEN = 9'b000_111_000;
-  parameter logic [8:0] BLUE = 9'b000_000_111;
-  parameter logic [8:0] YELLOW = 9'b111_111_000;
-  parameter logic [8:0] CYAN = 9'b000_111_111;
-  parameter logic [8:0] PURPLE = 9'b111_000_111;
-  parameter logic [8:0] WHITE = 9'b111_111_111;
+  // RGB color components
+  logic [3:0] r, g, b;
+  logic [2:0] sector;
+  logic [3:0] factor;
+  logic [5:0] adjusted_x;
 
-  // Test pattern calculations
+  // Calculate rainbow colors using position
   always_comb begin
-    case (frame_counter[27:25])  // Use higher bits for slower changes
-      3'd0: begin  // Full screen color cycle
-        case (frame_counter[24:22])
-          3'd0: next_color = RED;  // Red
-          3'd1: next_color = GREEN;  // Green
-          3'd2: next_color = BLUE;  // Blue
-          3'd3: next_color = YELLOW;  // Yellow (R+G)
-          3'd4: next_color = CYAN;  // Cyan (G+B)
-          3'd5: next_color = PURPLE;  // Purple (R+B)
-          3'd6: next_color = WHITE;  // White (R+G+B)
-          3'd7: next_color = BLACK;  // Black (none)
-        endcase
+    adjusted_x = pattern_x - 1;
+    sector = adjusted_x[5:3];
+    factor = {adjusted_x[2:0], 1'b0};
+
+    case (sector)
+      3'b000: begin  // Red
+        r = 4'hF;
+        g = 4'h0;
+        b = 4'h0;
       end
 
-      3'd1: begin  // Vertical stripes of all colors
-        case (pattern_x[5:3])  // 8 vertical sections
-          3'd0: next_color = BLACK;
-          3'd1: next_color = RED;
-          3'd2: next_color = GREEN;
-          3'd3: next_color = BLUE;
-          3'd4: next_color = YELLOW;
-          3'd5: next_color = CYAN;
-          3'd6: next_color = PURPLE;
-          3'd7: next_color = WHITE;
-        endcase
+      3'b001: begin  // Red to Yellow
+        r = 4'hF;
+        g = factor;
+        b = 4'h0;
       end
 
-      3'd2: begin  // Horizontal stripes of all colors
-        case (pattern_y[5:3])  // 8 horizontal sections
-          3'd0: next_color = BLACK;
-          3'd1: next_color = RED;
-          3'd2: next_color = GREEN;
-          3'd3: next_color = BLUE;
-          3'd4: next_color = YELLOW;
-          3'd5: next_color = CYAN;
-          3'd6: next_color = PURPLE;
-          3'd7: next_color = WHITE;
-        endcase
+      3'b010: begin  // Yellow
+        r = 4'hF;
+        g = 4'hF;
+        b = 4'h0;
       end
 
-      3'd3: begin  // 8x8 color grid
-        case ({
-          pattern_y[5:3], pattern_x[5:3]
-        })
-          6'd0: next_color = BLACK;
-          6'd1: next_color = RED;
-          6'd2: next_color = GREEN;
-          6'd3: next_color = BLUE;
-          6'd4: next_color = YELLOW;
-          6'd5: next_color = CYAN;
-          6'd6: next_color = PURPLE;
-          6'd7: next_color = WHITE;
-          6'd8: next_color = RED;
-          6'd9: next_color = GREEN;
-          6'd10: next_color = BLUE;
-          6'd11: next_color = YELLOW;
-          6'd12: next_color = CYAN;
-          6'd13: next_color = PURPLE;
-          6'd14: next_color = WHITE;
-          6'd15: next_color = BLACK;
-          default: next_color = BLACK;
-        endcase
+      3'b011: begin  // Yellow to Green
+        r = 4'hF - factor;
+        g = 4'hF;
+        b = 4'h0;
       end
 
-      3'd4: begin  // Color blending test
-        if (pattern_x < 32) begin
-          if (pattern_y < 32) next_color = RED;  // Top-left: Red
-          else next_color = GREEN;  // Bottom-left: Green
-        end else begin
-          if (pattern_y < 32) next_color = BLUE;  // Top-right: Blue
-          else next_color = YELLOW;  // Bottom-right: Yellow
-        end
+      3'b100: begin  // Green
+        r = 4'h0;
+        g = 4'hF;
+        b = 4'h0;
       end
 
-      3'd5: begin  // Moving color blocks
-        case ((pattern_x + frame_counter[6:4]) % 8)
-          3'd0: next_color = RED;
-          3'd1: next_color = GREEN;
-          3'd2: next_color = BLUE;
-          3'd3: next_color = YELLOW;
-          3'd4: next_color = CYAN;
-          3'd5: next_color = PURPLE;
-          3'd6: next_color = WHITE;
-          3'd7: next_color = BLACK;
-        endcase
+      3'b101: begin  // Green to Blue
+        r = 4'h0;
+        g = 4'hF - factor;
+        b = 4'hF;
       end
 
-      3'd6: begin  // Checkerboard with alternating colors
-        case ({
-          pattern_x[3], pattern_y[3]
-        })
-          2'b00: next_color = RED;
-          2'b01: next_color = GREEN;
-          2'b10: next_color = BLUE;
-          2'b11: next_color = WHITE;
-        endcase
+      3'b110: begin  // Blue
+        r = 4'h0;
+        g = 4'h0;
+        b = 4'hF;
       end
 
-      default: begin  // Rainbow pattern
-        if (pattern_x < 9) next_color = RED;
-        else if (pattern_x < 18) next_color = YELLOW;
-        else if (pattern_x < 27) next_color = GREEN;
-        else if (pattern_x < 36) next_color = CYAN;
-        else if (pattern_x < 45) next_color = BLUE;
-        else if (pattern_x < 54) next_color = PURPLE;
-        else next_color = WHITE;
+      3'b111: begin  // Blue to Purple
+        r = factor;
+        g = 4'h0;
+        b = 4'hF;
+      end
+      default: begin  // if we hit this we did something wrong so black
+        r = 0;
+        g = 0;
+        b = 0;
       end
     endcase
+
+    pixel_color = {r, g, b};
   end
 
   // Sequential logic
@@ -157,16 +104,17 @@ module main (
 
     if (write_divider == 0) begin
       write_en <= 1'b1;
-      write_x <= pattern_x;
-      write_y <= pattern_y;
-      write_color <= next_color;
+      write_x  <= pattern_x;
+      write_y  <= pattern_y;
 
       if (pattern_x == 63) begin
         pattern_x <= '0;
         if (pattern_y == 63) pattern_y <= '0;
         else pattern_y <= pattern_y + 1;
       end else pattern_x <= pattern_x + 1;
-    end else write_en <= 1'b0;
+    end else begin
+      write_en <= 1'b0;
+    end
   end
 
   display led_matrix (
@@ -174,7 +122,7 @@ module main (
       .write_en(write_en),
       .write_x(write_x),
       .write_y(write_y),
-      .write_color(write_color),
+      .write_color(pixel_color),
       .A(A),
       .B(B),
       .C(C),
