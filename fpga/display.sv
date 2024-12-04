@@ -76,8 +76,14 @@ module display (
       .B2(B2)
   );
 
-  // Main state machine
   always_ff @(posedge clk_in) begin
+    clk_div <= clk_div + 1;
+  end
+  logic pixel_clk;
+  assign pixel_clk = clk_div[1];
+
+  // Main state machine
+  always_ff @(posedge pixel_clk) begin
     state <= next_state;
 
     case (state)
