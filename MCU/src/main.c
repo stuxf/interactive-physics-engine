@@ -1,6 +1,8 @@
 #include "libraries/MPU6050.h"
 #include "libraries/STM32L432KC_I2C.h"
 #include "libraries/STM32L432KC.h"
+#include <math.h>
+//#include "PixelDust.h"
 #include <stdio.h>
 void testI2C_Write(uint8_t address, uint8_t reg, uint8_t data) {
     printf("Testing I2C Write...\n");
@@ -26,8 +28,8 @@ void testI2C_Read(uint8_t address, uint8_t reg) {
 
     printf("Read operation completed successfully. Data: 0x%X\n", readData[0]);
 }
-void mcu_to_fpga(int16_t accel_x, int16_t accel_y, int16_t accel_z);
-
+//void mcu_to_fpga(int16_t accel_x, int16_t accel_y, int16_t accel_z);
+void mcu_to_fpga(int16_t angle_deg);
 /*
 int main(void) {
     configureFlash();
@@ -77,7 +79,7 @@ int main(void) {
     MPU6050_Read_Accel(&accel_data);
     printf("Accel X: %.2fg, Y: %.2fg, Z: %.2fg\n", accel_data.Accel_X, accel_data.Accel_Y, accel_data.Accel_Z);
 
-    MPU6050_Read_Gyro(&gyro_data);
+  // MPU6050_Read_Gyro(&gyro_data);
     printf("Gyro X: %.2fdeg/s, Y: %.2fdeg/s, Z: %.2fdeg/s\n", gyro_data.Gyro_X, gyro_data.Gyro_Y, gyro_data.Gyro_Z);
     // Convert to raw integer data
         int16_t accel_x = (int16_t)(accel_data.Accel_X * 1000); // Convert to milli-g
@@ -87,8 +89,19 @@ int main(void) {
         // Print accelerometer data for debugging
     printf("Accel X: %d, Y: %d, Z: %d\n", accel_x, accel_y, accel_z);
 
+    double angle = atan2(accel_x,accel_y);
+    double angle_deg1 = (angle * (180/M_PI));
+    if (angle_deg1 < 0){
+      angle_deg1+=360;
+      }
+  angle_deg1 = angle_deg1+(45/2);
+  int16_t angle_deg  = (int16_t)angle_deg1 % 360;
+
+    //printf("Current facing angle:..%hd", angle_deg);
         // Send data to FPGA via SPI
-    mcu_to_fpga(accel_x, accel_y, accel_z);
+    //mcu_to_fpga(accel_x,accel_y,accel_z);
+    mcu_to_fpga(angle_deg);
+    printf("Current facing angle:..%hd", angle_deg);
     delay_millis(TIM2, 1000);
 
     //delay_millis(TIM2,100); // Delay 1 second between prints
@@ -96,9 +109,8 @@ int main(void) {
 
 }
 
-
 // Function to send accelerometer data to FPGA
-void mcu_to_fpga(int16_t accel_x, int16_t accel_y, int16_t accel_z) {
+/*void mcu_to_fpga(int16_t accel_x, int16_t accel_y, int16_t accel_z) {
     // Set chip enable high
     digitalWrite(SPI_CE, 1);
 
@@ -109,6 +121,18 @@ void mcu_to_fpga(int16_t accel_x, int16_t accel_y, int16_t accel_z) {
     spiSendReceive(accel_y & 0xFF);        // Low byte of Y
    spiSendReceive((accel_z >> 8) & 0xFF); // High byte of Z
     spiSendReceive(accel_z & 0xFF);        // Low byte of Z
+
+    // Set chip enable low
+    digitalWrite(SPI_CE, 0);
+}*/
+
+void mcu_to_fpga(int16_t angle_deg) {
+    // Set chip enable high
+    digitalWrite(SPI_CE, 1);
+
+    // Send accelerometer data (X, Y, Z)
+    spiSendReceive((angle_deg >> 8) & 0xFF); // High byte of angle
+    spiSendReceive(angle_deg & 0xFF);  
 
     // Set chip enable low
     digitalWrite(SPI_CE, 0);
