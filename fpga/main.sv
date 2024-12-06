@@ -32,9 +32,32 @@ module main (
   logic [5:0] write_x, write_y;
   logic [11:0] pixel_color;
 
+  //   // Pattern generator instance
+  //   physics_engine pattern_gen (
+  //       .clk(int_osc),
+  //       .resetn(resetn),
+  //       .write_en(write_en),
+  //       .write_x(write_x),
+  //       .write_y(write_y),
+  //       .pixel_color(pixel_color),
+  //       .led0(led0),
+  //       .led1(led1),
+  //       .led2(led2)
+  //   );
+
+  // Create internal signals for LED states from SPI
+  logic led0_int, led1_int, led2_int;
+
+  // Direction control from SPI
+  logic [2:0] direction;
+
+  assign direction = {led2_int, led1_int, led0_int};  // Connect LED outputs to direction control
+
   // Pattern generator instance
   pattern_generator pattern_gen (
       .clk(int_osc),
+      .resetn(resetn),
+      .direction(direction),
       .write_en(write_en),
       .write_x(write_x),
       .write_y(write_y),
@@ -47,9 +70,9 @@ module main (
       .sclk(sclk),
       .sdi(sdi),
       .cs_n(cs_n),
-      .led0(led0),
-      .led1(led1),
-      .led2(led2)
+      .led0(led0_int),
+      .led1(led1_int),
+      .led2(led2_int)
   );
 
   // LED matrix display instance
@@ -74,5 +97,8 @@ module main (
       .OE(OE),
       .LAT(LAT)
   );
+  assign led0 = led0_int;
+  assign led1 = led1_int;
+  assign led2 = led2_int;
 
 endmodule
