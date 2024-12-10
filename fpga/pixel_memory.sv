@@ -1,3 +1,11 @@
+/*
+ * Stephen Xu
+ * November 19th, 2024
+ * stxu@g.hmc.edu
+ * This is the pixel memory for our display
+ * Outputs RGB1 and RGB2 data
+ * Write 12 bits at a time
+ */
 module pixel_memory (
     input logic clk,
     // Memory write interface

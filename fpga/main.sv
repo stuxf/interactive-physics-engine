@@ -1,3 +1,9 @@
+/*
+ * Stephen Xu
+ * November 19th, 2024
+ * stxu@g.hmc.edu
+ * This is the main (top-level) module for our physics engine
+ */
 module main (
     // LED Matrix outputs
     output logic A,
@@ -32,19 +38,6 @@ module main (
   logic [5:0] write_x, write_y;
   logic [11:0] pixel_color;
 
-  //   // Pattern generator instance
-  //   physics_engine pattern_gen (
-  //       .clk(int_osc),
-  //       .resetn(resetn),
-  //       .write_en(write_en),
-  //       .write_x(write_x),
-  //       .write_y(write_y),
-  //       .pixel_color(pixel_color),
-  //       .led0(led0),
-  //       .led1(led1),
-  //       .led2(led2)
-  //   );
-
   // Create internal signals for LED states from SPI
   logic led0_int, led1_int, led2_int;
 
@@ -54,7 +47,7 @@ module main (
   assign direction = {led2_int, led1_int, led0_int};  // Connect LED outputs to direction control
 
   // Pattern generator instance
-  pattern_generator pattern_gen (
+  physics_engine physics_engine (
       .clk(int_osc),
       .resetn(resetn),
       .direction(direction),

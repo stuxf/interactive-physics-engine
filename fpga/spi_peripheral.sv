@@ -1,3 +1,9 @@
+/*
+ * Amy Liu
+ * December 1st, 2024
+ * amyliu01@g.hmc.edu
+ * Takes SPI input from IMU and outputs results to LEDS
+ */
 module spi_peripheral (
     input  logic resetn,  // Active-low reset
     input  logic sclk,    // SPI clock
