@@ -1,3 +1,10 @@
+/*
+File: MPU6050.c
+Author: Amy Liu
+Email: amyliu01@g.hmc.edu
+Date: 12/8/2024
+Source code for MPU6050 functions
+*/
 #include "STM32L432KC.h"
 #include "STM32L432KC_I2C.h"
 

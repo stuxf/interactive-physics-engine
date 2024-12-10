@@ -1,6 +1,10 @@
-// STM32L432KC.h
-// Header to include all other STM32L432KC libraries.
-
+/*
+File: STM32L432KC.h
+Author: Amy Liu
+Email: amyliu01@g.hmc.edu
+Date: 12/8/2024
+Purpose: Header to include all other STM32L432KC libraries
+*/
 #ifndef STM32L4_H
 #define STM32L4_H
 
